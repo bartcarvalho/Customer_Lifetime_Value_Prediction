@@ -1,0 +1,887 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+# Customer Lifetime Value Prediction
+
+### Problem Statement:
+
+To predict the Customer Lifetime Value for an insurance company offering vehicle insurance.
+
+
+### Description:
+
+Customer Lifetime Value is a commonly used metric by companies and financial institutions to assign a numeric value to their customers and thereby inform their strategy of increasing the companies profits.
+
+It is defined as the total monetary value that a customer holds to a bank or any financial entity over the entire course of their relationship.
+
+
+
+
+
+#### The formula used to calculate CLV is = (Annual revenue per customer x Customer relationship in years) – Customer acquisition cost
+
+
+
+
+
+The difficulty arises when some segments of customers invest a lot of money in a company over a short period of time while others might invest small sums over a longer period of time. Now, if a company were to focus only on the short-term high paying customers, they will miss out on the gradual but constant revenue invested by the latter kind of customer. Both of these kinds of customers might be of high value to the company and hence there is a need to account for these two kinds of customers as well as other factors. 
+
+
+In the case of insurance, customers fall into several categories. Companies design different policies as not all categories of customers will want the same policy. Some customers might go for a greater coverage, while some might go for less. This does not mean that the customers with lesser coverage are less valuable to the company, as we must take into account the cost of acquiring these customers as well.
+
+The insurance company must therefore study their existing customers considering all these factors to find out which category of customers to target.
+
+The dataset contains historical data of the customers already acquired by the company and the CLV for each of these customers has been computed. We must use this previously computed CLV along with the independent variables to predict the category of customers who will be profitable to the company.
+
+To account for all these factors this metric of customer-oriented evaluation is widely used.
+
+
+### Aim:
+
+To establish the relationship between the explanatory variables and the target variable and thereby to propose a model that can predict the target variable.
+
+In this case, the objective is to study how the outcome variable (CLV) is related to the independent variables and the subsequent model thus proposed should help the company to make an informed decision with regard to the kind of customer to target.
+
+It is a regression task to predict how much a given customer will be valuable to an insurance company. 
+
+
+
+
+
+
+## Exploratory Data Analysis
+
+
+
+
+Following are the packages used.
+```{r message=FALSE, warning=FALSE}
+library(tidyverse) 
+library(car) 
+library(zoo)
+library(lmtest) 
+library(dplyr) 
+library(stringr)
+library(caret)
+library(ggplot2) 
+library(timeDate)
+library(plotly)
+library(readxl)
+library(gganimate)
+library(corrplot)
+library(Hmisc)
+library(vtree)
+library(DataExplorer)
+library(caTools)
+library(nortest)
+```
+
+
+
+
+### Reading the dataset
+```{r}
+
+Marketing_Customer_Value_Analysis_2 <- read_excel('C:/Users/HP/Downloads/Marketing-Customer-Value-Analysis 2.xlsx')
+
+
+```
+
+
+
+### Setting seed for reproducibility and overview of dataset
+
+```{r}
+set.seed(223)
+head(Marketing_Customer_Value_Analysis_2)
+
+
+```
+
+
+
+### Histogram of the target variable (CLV)
+
+This shows us the distribution of the target variable, where y-axis contains  the probability density of the target variable.
+
+This tells us the monetary value that the customers represent to the company.
+
+
+```{r}
+Insurance_Dataset <- data.frame(Marketing_Customer_Value_Analysis_2)
+hist(Insurance_Dataset$Customer.Lifetime.Value,
+     breaks = 800,
+     freq = FALSE,
+     main = "Histogram of CLV", xlab = "CLV", border = "Blue")
+
+```
+This plot indicates that the distribution is heavily positively skewed, meaning that an overwhelming majority of the customers hold lower customer lifetime value to the company.A very small number of customers are in the higher bracket of lifetime value.
+
+The "ideal" customers to the company are small in number and if the company is to turn a profit they must also focus on catering to the customers with lower CLV as they are more in number.
+
+
+
+
+
+###### Description of dataset
+
+```{r}
+Insurance_Dataset %>% introduce()
+Insurance_Dataset %>% plot_intro()
+```
+There are no null values in this dataset.
+
+
+
+### CATEGORICAL VARIABLES VISUALIZATION
+
+
+
+#### To visualize the effect of state on CLV
+
+```{r}
+
+ggplot(Insurance_Dataset,aes (x=State ,
+              y=Customer.Lifetime.Value)) + geom_bar(stat="summary",fun="sum", width=0.5, fill = "Blue")+
+  labs(x="State",y = "Customer Life Time Value", fill="State") +
+  ggtitle("Sum of CLV contribution by State ")
+
+```
+Here we are checking how much effect the State that a customer belongs to has on the outcome variable. In other words, we are trying to find if a customer from a particular state is more valuable to the company than other states. 
+
+From the above chart it would appear that the company should focus their efforts on states like California or Oregon, since the sum of CLV from these states are higher. But the population of these states could also be a factor in the high CLV obtained, as California and Oregon are one of the more populated states in US. 
+```{r}
+count_state <- table(Insurance_Dataset$State)
+barplot(count_state, 
+        main = "Count plot of State",col = "Blue",
+        xlab = "State", ylab = "Count")
+
+```
+
+
+
+Let us explore this by considering the mean of the CLV by state in the subsequent chart. This measure will account for the larger populations of states like California and Oregon.
+
+```{r}
+aggData <- aggregate(x = Insurance_Dataset$Customer.Lifetime.Value,
+                     by=list(State = Insurance_Dataset$State),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = State, y = prop.table(stat(aggData$x)), fill = State, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 3) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = 'State', y = 'CLV in Percentage', fill = 'State') + 
+  ggtitle("Mean contribution to CLV by State")
+
+```
+When the mean of the CLV is computed we can see that no particular state is any more economically valuable than the other, as the customers from each state on an average contribute equally to the target variable(CLV).
+This tells us that state is a weak indicator variable for the CLV.
+
+
+
+#### To visualize the effect of Education on CLV
+
+
+```{r}
+
+ggplot(Insurance_Dataset,aes (x=Education ,
+              y=Customer.Lifetime.Value)) + geom_bar(stat="summary",fun="sum", width=0.5, fill = "Blue")+
+  labs(x="Education",y = "Customer Life Time Value", fill="Education") +
+  ggtitle("Visualization of CLV wrt Education")
+
+```
+
+```{r}
+count_education <- table(Insurance_Dataset$Education)
+barplot(count_education, 
+        main = "Count plot of Education",col = "Blue",
+        xlab = "Education", ylab = "Count")
+
+```
+
+
+
+```{r}
+aggData <- aggregate(x = Insurance_Dataset$Customer.Lifetime.Value,
+                     by=list(Education = Insurance_Dataset$Education),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = Education, y = prop.table(stat(aggData$x)), fill = Education, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 3) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = 'Education', y = 'CLV in Percentage', fill = 'Education') + 
+  ggtitle("Contribution to CLV by Education")
+
+```
+
+
+In the first plot it appears as though the contribution of customers having doctors and Master's qualification is much lesser compared to the customers with other qualifications, which is counter-intuitive. 
+However, in the next chart the average contribution of each class of qualification is almost the same, which indicates that the value of insurance policies purchased by the customers having doctors and Master's qualification is much higher than the customers having other qualifications. 
+
+
+
+
+
+
+
+
+#### To visualize the effect of Coverage on CLV
+
+```{r}
+ggplot(Insurance_Dataset,aes (x=Coverage ,
+              y=Customer.Lifetime.Value)) + geom_bar(stat="summary",fun="sum", width=0.5, fill = "Blue")+
+  labs(x="Coverage",y = "Customer Life Time Value", fill="Coverage") +
+  ggtitle("Contribution to CLV by Coverage")
+```
+```{r}
+count_coverage <- table(Insurance_Dataset$Coverage)
+barplot(count_coverage, 
+        main = "Count plot of Coverage",col = "Blue",
+        xlab = "Coverage", ylab = "Count")
+
+```
+
+
+
+```{r}
+aggData <- aggregate(x = Insurance_Dataset$Customer.Lifetime.Value,
+                     by=list(Coverage = Insurance_Dataset$Coverage),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = Coverage, y = prop.table(stat(aggData$x)), fill = Coverage, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 3) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = 'Coverage', y = 'CLV in Percentage', fill = 'Coverage') + 
+  ggtitle(" Mean CLV Contribution by Coverage")
+```
+
+It would be apparent from the first chart that the Basic coverage plan has the most contribution to CLV. 
+In the second chart, however, we can see that even though premium coverage plans accounted for the least volume of CLV, on an average a customer having the premium coverage has a greater contribution to CLV.
+
+
+
+
+
+
+
+
+
+
+#### To visualize the effect of Employment Status on CLV
+
+
+
+```{r}
+ggplot(Insurance_Dataset,aes (x=EmploymentStatus ,
+              y=Customer.Lifetime.Value)) + geom_bar(stat="summary",fun="sum", width=0.5, fill = "Blue")+
+  labs(x="Employment Status",y = "Customer Life Time Value", fill="Employment Status") +
+  ggtitle("Contribution to CLV by Employment Status")
+```
+```{r}
+count_employmentstatus <- table(Insurance_Dataset$EmploymentStatus)
+barplot(count_employmentstatus, 
+        main = "Count plot of Employment Status",col = "Blue",
+        xlab = "Employment Status", ylab = "Count")
+
+```
+
+```{r}
+aggData <- aggregate(x = Insurance_Dataset$Customer.Lifetime.Value,
+                     by=list(EmploymentStatus = Insurance_Dataset$EmploymentStatus),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = EmploymentStatus, y = prop.table(stat(aggData$x)), fill = EmploymentStatus, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 3) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = 'Employment Status', y = 'CLV in Percentage', fill = 'Employment Status') + 
+  ggtitle("Contribution to CLV by Employment Status")
+```
+In the first chart, it is evident that the customers who are employed are of greater value to the company than the other categories. The inference drawn from this is straightforward, i.e employed customers are more likely to be able to afford the premiums and therefore contribute a major chunk to the CLV.
+
+
+But in the second chart, when we account for the contribution on an average by the employment status, we notice that all are equally contributing to CLV.
+
+
+
+
+
+#### To visualize the effect of Location Code on CLV.
+
+```{r}
+ggplot(Insurance_Dataset,aes (x=Location.Code ,
+              y=Customer.Lifetime.Value)) + geom_bar(stat="summary",fun="sum", width=0.5, fill = "Blue")+
+  labs(x="Location Code",y = "Customer Life Time Value", fill="Location Code") +
+  ggtitle("Contribution to CLV by Location Code")
+```
+```{r}
+count_locationcode <- table(Insurance_Dataset$Location.Code)
+barplot(count_locationcode, 
+        main = "Count plot of Location Code",col = "Blue",
+        xlab = "Location Code", ylab = "Count")
+```
+
+```{r}
+aggData <- aggregate(x = Insurance_Dataset$Customer.Lifetime.Value,
+                     by=list(Location.Code = Insurance_Dataset$Location.Code),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = Location.Code, y = prop.table(stat(aggData$x)), fill = Location.Code, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 3) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = 'Location Code', y = 'CLV in Percentage', fill = 'Location Code') + 
+  ggtitle("Contribution to CLV by Location Code")
+```
+
+In the first chart it appears as though customers from the suburban location are a better contributor to CLV than the other areas. 
+
+But from the second, we see that all of the location codes on an average contribute equally to the CLV and therefore Location Code is a weak predictor of the CLV on its own.
+
+
+
+
+
+#### To visualize the effect of Marital Status on CLV
+```{r warning=FALSE}
+ggplot(Insurance_Dataset,aes (x=Insurance_Dataset$"Marital.Status", y=Insurance_Dataset$"Customer.Lifetime.Value")) + geom_bar(stat="summary",fun="sum", width=0.5, fill = "Blue") +
+  labs(x="Marital Status",y = "Customer Life Time Value", fill="Marital Status") + 
+  ggtitle("Visualization of CLV wrt Marital Status")
+  
+```
+```{r}
+count_maritalstatus <- table(Insurance_Dataset$Marital.Status)
+barplot(count_maritalstatus, 
+        main = "Count plot of Marital Status",col = "Blue",
+        xlab = "Marital Status", ylab = "Count")
+```
+
+
+```{r}
+aggData <- aggregate(x = Insurance_Dataset$Customer.Lifetime.Value,
+                     by=list(Marital.Status = Insurance_Dataset$Marital.Status),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = Marital.Status, y = prop.table(stat(aggData$x)), fill = Marital.Status, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 3) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = 'MaritalStatus', y = 'CLV in Percentage', fill = 'Marital Status') + 
+  ggtitle("Contribution to CLV by Marital Status")
+```
+We might erroneously conclude from the first chart that most married customers have high CLV but the next chart shows us that on an average there is no difference between the contributions of each sub-category to the CLV.
+
+
+#### To visualize the effect of Policy Type on CLV
+```{r}
+ggplot(Insurance_Dataset,aes (x=Policy.Type ,
+              y=Customer.Lifetime.Value)) + geom_bar(stat="summary",fun="sum", width=0.5, fill = "Blue")+
+  labs(x="Policy Type",y = "Customer Life Time Value", fill="Policy Type") +
+  ggtitle("Contribution to CLV by Policy Type")
+```
+
+```{r}
+ggplot(Insurance_Dataset,aes (x=Policy.Type)) + 
+         geom_bar(stat="count", width=0.5, fill = "Blue") +
+  labs(x="Policy Type",y = "Count", fill="Policy Type") +
+  ggtitle("Count of Policy Type")
+```
+
+```{r}
+aggData <- aggregate(x = Insurance_Dataset$Customer.Lifetime.Value,
+                     by=list(Policy.Type = Insurance_Dataset$Policy.Type),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = Policy.Type, y = prop.table(stat(aggData$x)), fill = Policy.Type, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 3) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = 'Policy Type', y = 'CLV in Percentage', fill = 'Policy Type') + 
+  ggtitle("Mean CLV contribution  by Policy Type")
+```
+Similar results are obtained as before. Initially it may appear that the personal auto policy might be a majority contributor but further analysis shows that it seems more likely that customers who have purchased the Special Auto have a greater CLV.
+
+
+
+#### To visualize the effect of gender on CLV
+```{r}
+ggplot(Insurance_Dataset,
+       aes(x=Gender, 
+           y= Customer.Lifetime.Value,
+           fill = Gender)) + 
+  geom_boxplot() + 
+  labs(x="Gender",y = "Customer Life Time Value", fill="Gender") + 
+  ggtitle("Visualization of CLV wrt Gender")
+```
+
+
+```{r}
+ggplot(Insurance_Dataset,aes (x=Gender ,
+              y=Customer.Lifetime.Value)) + geom_bar(stat="summary",fun="sum", width=0.5, fill = "Blue")+
+  labs(x="Gender",y = "Customer Life Time Value", fill="Gender") +
+  ggtitle("Contribution to CLV by Gender")
+```
+Females seems to be on an average slightly better contributors to CLV than men.
+
+
+
+
+#### To visualize the effect of Sales Channel on CLV.
+```{r}
+ggplot(Insurance_Dataset,aes (x=Sales.Channel ,
+              y=Customer.Lifetime.Value)) + geom_bar(stat="summary",fun="sum", width=0.5, fill = "Blue")+
+  labs(x="Sales Channel",y = "Customer Life Time Value", fill="Sales Channel") +
+  ggtitle("Contribution to CLV by Sales Channel")
+```
+```{r}
+ggplot(Insurance_Dataset,aes (x=Sales.Channel)) + 
+         geom_bar(stat="count", width=0.5, fill = "Blue") +
+  labs(x="Policy Type",y = "Count") +
+  ggtitle("Count of Sales Channel")
+```
+
+```{r}
+aggData <- aggregate(x = Insurance_Dataset$Customer.Lifetime.Value,
+                     by=list(Sales.Channel = Insurance_Dataset$Sales.Channel),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = Sales.Channel, y = prop.table(stat(aggData$x)), fill = Sales.Channel, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 3) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = 'Sales Channel', y = 'CLV in Percentage', fill = 'Sales Channel') + 
+  ggtitle("CLV Distribution by Sales Channel")
+```
+
+
+From the above two graphs, it is evident that it is hard to predict CLV from Sales Channel as all the sub-categories are equal contributors to CLV.
+
+
+#### To visualize the effect of Vehicle Class on CLV
+```{r}
+ggplot(Insurance_Dataset,aes (x=Vehicle.Class ,
+              y=Customer.Lifetime.Value)) + geom_bar(stat="summary",fun="sum", width=0.5, fill = "Blue")+
+  labs(x="Vehicle Class",y = "Customer Life Time Value", fill="Vehicle Class") +
+  ggtitle("Contribution to CLV by Vehicle Class")
+```
+```{r}
+ggplot(Insurance_Dataset,aes (x=Vehicle.Class)) + 
+         geom_bar(stat="count", width=0.5, fill = "Blue") +
+  labs(x="Vehicle Class",y = "Count") +
+  ggtitle("Count of Vehicle Class")
+```
+
+```{r}
+aggData <- aggregate(x = Insurance_Dataset$Customer.Lifetime.Value,
+                     by=list(Vehicle.Class = Insurance_Dataset$Vehicle.Class),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = Vehicle.Class, y = prop.table(stat(aggData$x)), fill = Vehicle.Class, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 3) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = 'Vehicle Class', y = 'CLV in Percentage', fill = 'Vehicle Class') + 
+  ggtitle("CLV Distribution by Vehicle Class")
+```
+These two charts show us that although the customers owning Luxury, and Luxury SUV are a small fraction, on an average they contribute greatly to the CLV. Therefore we can make a conclusion that if a customer owns a Luxury or Luxury SUV car, there is a high likelihood that she/he she will have high CLV.
+
+
+
+#### To visualize the effect of Vehicle Size on CLV.
+```{r}
+aggData <- aggregate(x = Insurance_Dataset$Customer.Lifetime.Value,
+                     by=list(Vehicle.Size = Insurance_Dataset$Vehicle.Size),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = Vehicle.Size, y = prop.table(stat(aggData$x)), fill = Vehicle.Size, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 3) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = 'Vehicle Size', y = 'CLV in Percentage', fill = 'Vehicle Size') + 
+  ggtitle("CLV Distribution by Vehicle Size")
+```
+But the variable vehicle size is a weak predictor because all the sub-categories contribute equally to the CLV.
+
+
+
+```{r}
+ggplot(Insurance_Dataset,aes (x=Vehicle.Size)) + 
+         geom_bar(stat="count", width=0.5, fill = "Blue") +
+  labs(x="Vehicle Size",y = "Count") +
+  ggtitle("Count of Vehicle Size")
+```
+
+
+### EDA OF NUMERIC DEPENDENT VARIABLES VS CLV.
+
+#### To visualize the correlation between the variables
+A correlation heat map is plotted for all the  numeric variables. This also checks for multi-collinearity between variables.
+```{r}
+autoCorr <- Insurance_Dataset[,c(3,10,13:17,22)]
+colnames(autoCorr) <- c("Customer Lifetime Value", "Income", "Months Premium Auto", "Months Since Last Claim", "Months Since Policy Inception",
+                        "Open Complaints", "Num of Policies", "Total Claim Amt.")
+autoCorr <- cor(autoCorr)
+# Plot the correlation table
+corrplot(autoCorr, method = "color", order = "hclust")
+
+```
+As is evident from the heat map of correlation, none of the columns are robust predictors of CLV but there is no multicollinearity. 
+
+
+
+#### To explore the effect of Income and Total Claim Amount
+
+```{r}
+plot(x=Insurance_Dataset$"Income", y=Insurance_Dataset$"Total.Claim.Amount", col="Blue", cex=1, xlab="Income",
+     ylab="Total Claim Amount",main="Scatterplot of Income vs TCA")
+```
+We see in this chart that there is no linear positive or negative relationship between variables.
+This means that they are independent of each other
+
+
+#### To visualize the effect of Monhly Premium Auto and Total Claim Amount
+
+```{r}
+plot(x=Insurance_Dataset$"Monthly.Premium.Auto", y=Insurance_Dataset$"Total.Claim.Amount", col="Blue", cex=1, xlab="Monthly Premium Auto",
+     ylab="Total Claim Amount",main="Scatterplot of MPA vs TCA")
+```
+Here we see the  relationship of MPA and TCA, we notice that a few clusters have a positive linear relationship, as evidenced by the upward slopes in the chart. 
+
+#### To visualize the effect of Monthly Premium Auto and CLV
+```{r}
+plot(x=Insurance_Dataset$"Monthly.Premium.Auto", y=Insurance_Dataset$"Customer.Lifetime.Value", col="Blue", cex=1, xlab="Monthly Premium Auto",
+     ylab="Customer Lifetime Value",main="Scatterplot of MPA vs CLV")
+```
+Upon investigating the relationship between MPA and the outcome variable CLV we see that many clusters have strong linear positive relationships.
+
+
+
+
+#### To visualize the effect of Total Claim Amount on CLV.
+```{r}
+plot(x=Insurance_Dataset$"Total.Claim.Amount", y=Insurance_Dataset$"Customer.Lifetime.Value", col="Blue", cex=1, xlab="Total.Claim.Amount", 
+     ylab="Customer Lifetime Value", main="Scatterplot of TCA vs CLV")
+```
+There is no evidence that there is any linear relationship between Total Claim Amount and CLV as the scatterplot is inconclusive. There is no clear slope either downward or upward in the chart indicating that these two variables are independent of each other.
+
+
+### Multivariate Visualizations.
+
+
+
+
+
+#### Effect of Education and Employment Status on CLV
+
+```{r}
+p1<-plot_ly(Insurance_Dataset, x =~Education, y=~Insurance_Dataset$`Customer.Lifetime.Value`,color=~EmploymentStatus)
+layout(p1, title ='clv and education', yaxis = list(title = 'ClV '))
+
+
+```
+Education does not appear to affect the CLV value, while employed customers across every educational qualification have high CLV.
+
+
+#### Effect on CLV by State and Education
+```{r}
+p1<-plot_ly(Insurance_Dataset, x =~State, y =~Insurance_Dataset$`Customer.Lifetime.Value`,type='bar',color=~Insurance_Dataset$`Location.Code`) #funnelarea/violin
+layout(p1, title ='CLV w.r.t state and location', yaxis = list(title = 'ClV '))
+
+```
+
+The State that a customer belongs to doesnt affect the target variable.
+
+
+
+#### Effect on CLV by Marital Status and Vehicle Class
+```{r}
+p1<-plot_ly(Insurance_Dataset, x =~Insurance_Dataset$`Marital.Status`, y =~Insurance_Dataset$`Customer.Lifetime.Value`,type='bar',color=~Insurance_Dataset$`Vehicle.Class`) 
+layout(p1, title ='CLV status w.r.t Marital Staus  and Vehicle Class', yaxis = list(title = 'CLV '))
+
+
+```
+When we consider Marital Status and Vehicle Class we notice that 
+```{r}
+#vtree(Insurance_Dataset,c("Gender","Education"),fillcolor=c(Gender="Blue",Education="Green"),horiz=FALSE,showcount = FALSE)
+```
+
+
+
+
+
+
+```{r}
+
+#vtree(Insurance_Dataset,c("Coverage","Vehicle.Size"),fillcolor=c(Vehicle.Size="Blue",Education="Green"),horiz=FALSE,showcount = FALSE)
+```
+Sarah's stuff 
+
+Intro to feature engineering
+
+
+###Feature Engineering:
+
+1.	Sqrt and Log transformations have been used in trying out various models.
+
+2.	Variations of relationship between “Monthly Premium Auto” and “Number of Policies” were tried out but their effect was redundant.
+
+
+
+
+
+
+
+
+## Conclusion
+
+
+
+Various models were tried out and their performance measures tabulated as given above. The models were modeled without following feature selection methods and after using feature selection methods. A summary of the features selected in various models is as shown in a subsequent section.
+
+###### Without Feature selection and any feature engineering :-
+
+1.	If outliers are not removed, then the performance is extremely poor, even after removing the least significant features.
+
+2.	If outliers are removed from the indicator variables, then the performance of Adj R2improves to approx. 63%. There is hardly any effect in the Adj R2  valuewhen insignificant variables are removed and even after binning is effected. Removal of outliers results in removal of approx. 8% of the records being removed.
+
+3.	When outliers are removed from the respondent variable, clv, the performance dramatically improves to 93%. There is no change in this figure even after binning. Removal of outliers results in removal of approx. 12% of the records being removed.
+
+4.	When outliers are removed from the respondent variable, clv, there are outliers still available in Total Claim Amount and Monthly Premium Auto. Removal of outliers from these features results in removal of a total of 16.88% of records. The performance, however, varies only from the third decimal point onwards wrt the case in point 3 above, and hence there is marginal improvement in performance with all outliers removed. 
+
+5.	However, steps 3 and 4 were only to check the effect of removing outliers from the respondent variable. This is not being followed.
+
+###### With Feature Selection and/or sqrt/log transformation:
+
+1.	The Adj R2 value remains around 63% irrespective of whether outliers are removed or not and whether binning is done or not.Therefore, we retain all outliers as indicators of variation in the data and do not carry out binning. Instead, we carry out scaling of the data.
+
+2.	When we apply sqrt transformation to the respondent variable the Adj R2 value goes up to 79 – 80% approx.
+
+3.	When we apply log transformation to the respondent variable, we obtain Adj R2 values in the region of 89-90%.
+
+4.	The best values are obtained in the model where all the features are taken and the log transformation is applied to the respondent variable.
+
+5.	“Monthly Premium Auto” was omitted from modelling due to its correlation with “Total Claim Amount”.
+
+##### Pertinent Take-aways:
+
+1.	Binning has negligible effect on performance.
+
+2.	Transformation of Respondent variable (sqrt/Log) has a significant improvement in performance vis-à-vis the non transformed variants.
+
+3.	Removal of outliers improved performance, but also caused significant loss of data. Hence, outliers were retained.
+
+4.	Removal of least significant features hardly caused an improvement in performance. Hence, feature selection techniques were employed.
+
+5.	Converting “Number of Open Complaints” and “Number of Policies” to factors improved accuracy of the models.
+
+
+### Feature Selection
+
+```{r pressure, echo=FALSE, fig.cap="A caption", out.width = '100%'}
+knitr::include_graphics("feature selection.JPG")
+
+```
+
+
+
+
+
+
+### Code for the model with the best performance
+
+```{r}
+
+
+df<- read.csv("C:\\Users\\HP\\Downloads\\Marketing-Customer-Value-Analysis.csv")
+str(df)
+glimpse(df)
+```
+
+
+```{r}
+#-----------------------------------Min Max normalization all numeric variables (Scaling)---------------------------#
+
+#Income
+df$Income<- (df$Income-min(df$Income))/(max(df$Income)-min(df$Income))
+```
+
+
+
+
+
+```{r}
+#Months.Since.Last.Claim
+df$Months.Since.Last.Claim<- (df$Months.Since.Last.Claim-min(df$Months.Since.Last.Claim))/(max(df$Months.Since.Last.Claim)-min(df$Months.Since.Last.Claim))
+```
+
+
+```{r}
+#Months.Since.Policy.Inception
+df$Months.Since.Policy.Inception<- (df$Months.Since.Policy.Inception-min(df$Months.Since.Policy.Inception))/(max(df$Months.Since.Policy.Inception)-min(df$Months.Since.Policy.Inception))
+```
+
+
+
+```{r}
+#Total.Claim.Amount
+df$Total.Claim.Amount<- (df$Total.Claim.Amount-min(df$Total.Claim.Amount))/(max(df$Total.Claim.Amount)-min(df$Total.Claim.Amount))
+
+```
+
+
+```{r}
+#converting categorical feauters to factors.
+df$State <- as.factor(df$State)
+df$Response <- as.factor(df$Response)
+df$Coverage <- as.factor(df$Coverage)
+df$Education <- as.factor(df$Education)
+df$EmploymentStatus <- as.factor(df$EmploymentStatus)
+df$Gender <- as.factor(df$Gender)
+df$Location.Code  <- as.factor(df$Location.Code)
+df$Marital.Status  <- as.factor(df$Marital.Status)
+df$Policy.Type  <- as.factor(df$Policy.Type)
+df$Renew.Offer.Type  <- as.factor(df$Renew.Offer.Type)
+df$Policy  <- as.factor(df$Policy)
+df$Sales.Channel  <- as.factor(df$Sales.Channel)
+df$Vehicle.Class  <- as.factor(df$Vehicle.Class)
+df$Vehicle.Size  <- as.factor(df$Vehicle.Size)
+```
+
+```{r}
+#Converting no. of open complaints and policies also to factor.
+df$Number.of.Open_Complaints <- as.factor(df$Number.of.Open.Complaints)
+df$Number.of.Policies <- as.factor(df$Number.of.Policies)
+str(df)
+```
+
+
+```{r}
+#-----------------------------------Log transformation only on CLV---------------------------#
+
+
+df$Customer.Lifetime.Value=log(df$Customer.Lifetime.Value)
+```
+
+
+
+
+```{r}
+#-----------------------------------Splitting the data to test and train.---------------------------#
+
+
+split <- sample.split(df, SplitRatio = 0.7)
+split
+train <- subset(df, split="true")
+test <-subset(df, split="false")
+train
+```
+
+```{r}
+#Training the model with normalized data columns and log transformed clv
+fit3<- lm(Customer.Lifetime.Value ~ 	State+Response+Coverage+
+           Education+EmploymentStatus+Gender+
+           Income+Location.Code+Marital.Status+
+           Months.Since.Last.Claim+Months.Since.Policy.Inception+
+           Number.of.Open.Complaints+Number.of.Policies+Policy+            Renew.Offer.Type+Sales.Channel+Total.Claim.Amount+Vehicle.Class+Vehicle.Size , data=train)
+
+summary(fit3)
+```
+```{r}
+#Finding RSE
+sigma(fit3)
+```
+
+```{r}
+# computing test MSE
+test %>% 
+  add_predictions(fit3) %>%
+  summarise(MSE = mean((Customer.Lifetime.Value - pred)^2))
+```
+
+
+```{r}
+# computing train MSE
+train %>% 
+  add_predictions(fit3) %>%
+  summarise(MSE = mean((Customer.Lifetime.Value - pred)^2))
+```
+
+```{r}
+#Plotting the model.
+plot(fit3)
+```
+
+
+```{r}
+##################################### Checking of Assumption ############################################
+
+
+# 1. In the residual vs fitted graph we cannot see any funnel shape in the residues, hence the assumption of homoskedasticity is satisfied.
+
+# 2. The points in the center part of the graphs follow the Q-Q plot. The trailing portion deviates from the Q-Q plot by a small amount. However, the leading portion deviates significantly from the Q-Q plot indicating non adherence to normality. Therefore, Log transformation has been applied to the target variable. The graph of the log transformed target variable is displayed below. As we can see graph resembles the normal curve.
+
+# 3. Residuals are spread equally along the ranges of predictors, indicating homoscedasticity. We can see a  horizontal line with equally (randomly) spread points.
+
+# 4. Even though there seems to be extreme values, the regression line is more or less straight.  
+```
+
+
+```{r}
+# Plot of Log transformed CLV 
+hist(df$Customer.Lifetime.Value,
+breaks = 800,
+freq = FALSE,
+main = "CLV Histogram", xlab = "CLV", border = "Blue")
+```
+
+
+```{r}
+
+
+# Residuals should be uncorrelated.There should be no Autocorrelation.
+# Null H0: residuals from a linear regression are uncorrelated. 
+# D-W Statistic should be close to 2. 
+
+
+durbinWatsonTest(fit3)
+
+
+#Since, the p-value is >0.05, we fail to reject H0: (No Autocorrelation)
+```
+
+
+
+
+
+```{r}
+# Checking multicollinearity
+
+vif(fit3)
+
+# The values of VIF should be within 2. And in no case it should be greater than 10. 
+# Since all values are from 1 to 4, absence of multicollinearity is witnessed. 
+```
+```{r}
+
+#  After checking the assumption of the linear regression model we can say that the assumptions seems to be largely satisfied.
+
+```
+
+```{r}
+getwd()
+```
+
+
+### Additional Data that couldve helped
+
+### Contribution of team memmbers
+
+
+### References
+-----------------------------------------------
+
+```{r pressure, echo=FALSE, fig.cap="A caption", out.width = '100%'}
+knitr::include_graphics("summary regression.JPG")
+
+```
